@@ -60,17 +60,19 @@
     const video = document.getElementById('video');
     const channelList = document.getElementById('channel-list');
 
-    // Use a proxy to avoid CORS issues (CORS Anywhere)
-    const proxyUrl = 'https://cors-anywhere.herokuapp.com/'; // CORS proxy
-    const playlistUrl = 'https://iptv-org.github.io/iptv/countries/jp.m3u'; // Replace with your playlist URL
+    // CORS proxy URL to handle external playlist
+    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
+    const playlistUrl = 'https://iptv-org.github.io/iptv/countries/jp.m3u'; // You can replace this with another valid URL
 
     // Function to fetch the .m3u playlist and parse it
     function loadPlaylist(url) {
-      // Fetch playlist using proxy to avoid CORS issues
+      console.log('Fetching playlist from URL:', url);
+      
+      // Use CORS proxy to bypass restrictions
       fetch(proxyUrl + url)
         .then(response => {
           if (!response.ok) {
-            throw new Error('Failed to load the playlist. Response not OK.');
+            throw new Error('Failed to load the playlist via proxy. Response not OK.');
           }
           return response.text();
         })
@@ -80,8 +82,25 @@
           displayChannels(channels);
         })
         .catch(error => {
-          channelList.innerHTML = 'Failed to load channels.';
-          console.error('Error loading playlist:', error);
+          console.error('Error with CORS proxy fetch:', error);
+          console.log('Attempting direct fetch...');
+          // Fallback: try fetching directly if the proxy fails
+          fetch(url)
+            .then(response => {
+              if (!response.ok) {
+                throw new Error('Failed to load the playlist directly.');
+              }
+              return response.text();
+            })
+            .then(data => {
+              console.log('Playlist data loaded directly');
+              const channels = parseM3U(data);
+              displayChannels(channels);
+            })
+            .catch(error => {
+              console.error('Direct fetch failed:', error);
+              channelList.innerHTML = 'Failed to load channels. Please try again later.';
+            });
         });
     }
 
@@ -92,10 +111,16 @@
       let name = null;
 
       lines.forEach(line => {
+        line = line.trim();
         if (line.startsWith('#EXTINF:')) {
-          name = line.split(',')[1];
+          // Get channel name from the EXTINF tag
+          name = line.split(',')[1].trim();
         } else if (line.startsWith('http')) {
-          channels.push({ name, url: line });
+          // Get the channel URL
+          if (name) {
+            channels.push({ name, url: line });
+            name = null; // Reset name after adding the channel
+          }
         }
       });
 
@@ -121,6 +146,7 @@
 
     // Function to load the selected channel stream into the video player
     function loadChannel(url) {
+      console.log('Loading channel:', url);
       if (Hls.isSupported()) {
         // If the browser supports HLS.js (Chrome, etc.), use HLS.js
         const hls = new Hls();
