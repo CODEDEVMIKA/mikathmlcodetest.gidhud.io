@@ -1,22 +1,22 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="de">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HLS Player with Channel Selector</title>
+  <title>HLS Player mit Kanal-Auswahl</title>
   <style>
     body {
       font-family: Arial, sans-serif;
       margin: 0;
       display: flex;
+      flex-direction: column;
     }
     #sidebar {
-      width: 300px;
       background-color: #f8f9fa;
-      border-right: 1px solid #ccc;
-      overflow-y: auto;
-      height: 100vh;
       padding: 10px;
+      border-bottom: 1px solid #ccc;
+      width: 100%;
+      box-sizing: border-box;
     }
     #content {
       flex: 1;
@@ -39,13 +39,34 @@
       height: auto;
       border: 1px solid #000;
     }
+    input {
+      padding: 10px;
+      width: 80%;
+      margin: 10px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      background-color: #007bff;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #0056b3;
+    }
   </style>
 </head>
 <body>
-  <!-- Sidebar for channel list -->
+  <!-- Sidebar for URL input -->
   <div id="sidebar">
-    <h3>Channels</h3>
-    <div id="channel-list">Loading channels...</div>
+    <h3>Stream oder Playlist URL eingeben</h3>
+    <input type="text" id="url-input" placeholder="Stream- oder Playlist-URL einfügen">
+    <button id="load-btn">Stream/Playlist laden</button>
+    <div id="channel-list">Bitte eine gültige URL eingeben.</div>
   </div>
 
   <!-- Content area for video player -->
@@ -56,55 +77,45 @@
   <!-- Include HLS.js -->
   <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
   <script>
-    // Elements
     const video = document.getElementById('video');
+    const urlInput = document.getElementById('url-input');
+    const loadButton = document.getElementById('load-btn');
     const channelList = document.getElementById('channel-list');
 
-    // CORS proxy URL to handle external playlist
-    const proxyUrl = 'https://cors-anywhere.herokuapp.com/';
-    const playlistUrl = 'https://iptv-org.github.io/iptv/countries/jp.m3u'; // You can replace this with another valid URL
+    // Funktion zum Laden des Streams oder der Playlist
+    function loadStreamOrPlaylist(url) {
+      if (url.includes('.m3u')) {
+        loadPlaylist(url);
+      } else if (url.includes('.m3u8')) {
+        loadChannel(url);
+      } else {
+        alert("Ungültige URL. Bitte eine gültige Stream- oder Playlist-URL eingeben.");
+      }
+    }
 
-    // Function to fetch the .m3u playlist and parse it
+    // Funktion zum Laden einer Playlist
     function loadPlaylist(url) {
-      console.log('Fetching playlist from URL:', url);
-      
-      // Use CORS proxy to bypass restrictions
-      fetch(proxyUrl + url)
+      channelList.innerHTML = 'Playlist wird geladen...';
+
+      // Playlist abrufen und parsen
+      fetch(url)
         .then(response => {
           if (!response.ok) {
-            throw new Error('Failed to load the playlist via proxy. Response not OK.');
+            throw new Error('Fehler beim Abrufen der Playlist.');
           }
           return response.text();
         })
         .then(data => {
-          console.log('Playlist data loaded successfully');
           const channels = parseM3U(data);
           displayChannels(channels);
         })
         .catch(error => {
-          console.error('Error with CORS proxy fetch:', error);
-          console.log('Attempting direct fetch...');
-          // Fallback: try fetching directly if the proxy fails
-          fetch(url)
-            .then(response => {
-              if (!response.ok) {
-                throw new Error('Failed to load the playlist directly.');
-              }
-              return response.text();
-            })
-            .then(data => {
-              console.log('Playlist data loaded directly');
-              const channels = parseM3U(data);
-              displayChannels(channels);
-            })
-            .catch(error => {
-              console.error('Direct fetch failed:', error);
-              channelList.innerHTML = 'Failed to load channels. Please try again later.';
-            });
+          console.error('Fehler beim Laden der Playlist:', error);
+          channelList.innerHTML = 'Kanäle konnten nicht geladen werden. Bitte versuche es später erneut.';
         });
     }
 
-    // Parse the .m3u file content and return an array of { name, url }
+    // .m3u-Datei parsen und eine Liste von Kanälen zurückgeben
     function parseM3U(m3uContent) {
       const lines = m3uContent.split('\n');
       const channels = [];
@@ -113,24 +124,21 @@
       lines.forEach(line => {
         line = line.trim();
         if (line.startsWith('#EXTINF:')) {
-          // Get channel name from the EXTINF tag
-          name = line.split(',')[1].trim();
+          name = line.split(',')[1].trim(); // Kanalname
         } else if (line.startsWith('http')) {
-          // Get the channel URL
           if (name) {
             channels.push({ name, url: line });
-            name = null; // Reset name after adding the channel
+            name = null;
           }
         }
       });
-
       return channels;
     }
 
-    // Display the list of channels in the sidebar
+    // Kanäle in der Sidebar anzeigen
     function displayChannels(channels) {
       if (channels.length === 0) {
-        channelList.innerHTML = 'No channels found.';
+        channelList.innerHTML = 'Keine Kanäle in der Playlist gefunden.';
         return;
       }
 
@@ -144,28 +152,36 @@
       });
     }
 
-    // Function to load the selected channel stream into the video player
+    // Den ausgewählten Kanal streamen
     function loadChannel(url) {
-      console.log('Loading channel:', url);
       if (Hls.isSupported()) {
-        // If the browser supports HLS.js (Chrome, etc.), use HLS.js
+        // Wenn der Browser HLS.js unterstützt (z.B. Chrome), HLS.js verwenden
         const hls = new Hls();
         hls.loadSource(url);
         hls.attachMedia(video);
         hls.on(Hls.Events.MANIFEST_PARSED, function () {
           video.play();
+          video.volume = 0.2; // Setze die Lautstärke auf 20%
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // If the browser supports native HLS (like Firefox, Safari)
+        // Wenn der Browser HLS nativ unterstützt (z.B. Safari)
         video.src = url;
         video.play();
+        video.volume = 0.2; // Setze die Lautstärke auf 20%
       } else {
-        alert('Your browser does not support HLS playback.');
+        alert('Dein Browser unterstützt keine HLS-Wiedergabe.');
       }
     }
 
-    // Load the playlist when the page loads
-    loadPlaylist(playlistUrl);
+    // Event-Listener für den "Laden"-Button
+    loadButton.addEventListener('click', () => {
+      const url = urlInput.value.trim();
+      if (url) {
+        loadStreamOrPlaylist(url);
+      } else {
+        alert('Bitte eine gültige URL eingeben.');
+      }
+    });
   </script>
 </body>
 </html>
