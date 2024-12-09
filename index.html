@@ -1,187 +1,143 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>HLS Player mit Kanal-Auswahl</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      margin: 0;
-      display: flex;
-      flex-direction: column;
-    }
-    #sidebar {
-      background-color: #f8f9fa;
-      padding: 10px;
-      border-bottom: 1px solid #ccc;
-      width: 100%;
-      box-sizing: border-box;
-    }
-    #content {
-      flex: 1;
-      padding: 10px;
-    }
-    .channel {
-      padding: 8px;
-      margin: 5px 0;
-      cursor: pointer;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-      background-color: #fff;
-      transition: background-color 0.3s;
-    }
-    .channel:hover {
-      background-color: #e9ecef;
-    }
-    video {
-      width: 100%;
-      height: auto;
-      border: 1px solid #000;
-    }
-    input {
-      padding: 10px;
-      width: 80%;
-      margin: 10px 0;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-    }
-    button {
-      padding: 10px;
-      margin: 10px 0;
-      border-radius: 5px;
-      border: 1px solid #ccc;
-      background-color: #007bff;
-      color: #fff;
-      cursor: pointer;
-    }
-    button:hover {
-      background-color: #0056b3;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>M3U Playlist Player</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: row;
+        }
+
+        /* Rainbow background */
+        body::before {
+            content: "";
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, red, orange, yellow, green, blue, indigo, violet);
+            background-size: 300% 300%;
+            animation: rainbow 10s linear infinite;
+            z-index: -1;
+        }
+
+        @keyframes rainbow {
+            0% { background-position: 0% 50%; }
+            100% { background-position: 100% 50%; }
+        }
+
+        /* Sidebar styles */
+        #sidebar {
+            width: 250px;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            overflow-y: auto;
+            height: 100vh;
+        }
+
+        #sidebar h2 {
+            text-align: center;
+        }
+
+        #sidebar ul {
+            list-style-type: none;
+            padding: 0;
+        }
+
+        #sidebar li {
+            margin: 10px 0;
+        }
+
+        #sidebar a {
+            color: #00FFFF;
+            text-decoration: none;
+        }
+
+        #sidebar a:hover {
+            text-decoration: underline;
+        }
+
+        /* Player styles */
+        #player-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        video {
+            width: 100%;
+            max-width: 800px;
+            border: 3px solid white;
+            border-radius: 10px;
+        }
+    </style>
 </head>
 <body>
-  <!-- Sidebar for URL input -->
-  <div id="sidebar">
-    <h3>Stream oder Playlist URL eingeben</h3>
-    <input type="text" id="url-input" placeholder="Stream- oder Playlist-URL einfügen">
-    <button id="load-btn">Stream/Playlist laden</button>
-    <div id="channel-list">Bitte eine gültige URL eingeben.</div>
-  </div>
+    <div id="sidebar">
+        <h2>Channel List</h2>
+        <ul id="channel-list">
+            <!-- Channels will be loaded dynamically -->
+        </ul>
+    </div>
+    <div id="player-container">
+        <video id="videoPlayer" controls autoplay>
+            <source id="videoSource" src="" type="application/x-mpegURL">
+            Your browser does not support the video player.
+        </video>
+    </div>
 
-  <!-- Content area for video player -->
-  <div id="content">
-    <video id="video" controls autoplay></video>
-  </div>
+    <script>
+        // M3U Playlist Parser and Loader
+        const m3uUrl = "path/to/your/playlist.m3u"; // Replace with the URL or local path to your M3U file
+        const channelList = document.getElementById('channel-list');
+        const videoPlayer = document.getElementById('videoPlayer');
+        const videoSource = document.getElementById('videoSource');
 
-  <!-- Include HLS.js -->
-  <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
-  <script>
-    const video = document.getElementById('video');
-    const urlInput = document.getElementById('url-input');
-    const loadButton = document.getElementById('load-btn');
-    const channelList = document.getElementById('channel-list');
+        // Fetch and parse M3U
+        async function loadM3U() {
+            try {
+                const response = await fetch(m3uUrl);
+                const text = await response.text();
+                const lines = text.split('\n');
+                let currentChannel = null;
 
-    // Funktion zum Laden des Streams oder der Playlist
-    function loadStreamOrPlaylist(url) {
-      if (url.includes('.m3u')) {
-        loadPlaylist(url);
-      } else if (url.includes('.m3u8')) {
-        loadChannel(url);
-      } else {
-        alert("Ungültige URL. Bitte eine gültige Stream- oder Playlist-URL eingeben.");
-      }
-    }
-
-    // Funktion zum Laden einer Playlist
-    function loadPlaylist(url) {
-      channelList.innerHTML = 'Playlist wird geladen...';
-
-      // Playlist abrufen und parsen
-      fetch(url)
-        .then(response => {
-          if (!response.ok) {
-            throw new Error('Fehler beim Abrufen der Playlist.');
-          }
-          return response.text();
-        })
-        .then(data => {
-          const channels = parseM3U(data);
-          displayChannels(channels);
-        })
-        .catch(error => {
-          console.error('Fehler beim Laden der Playlist:', error);
-          channelList.innerHTML = 'Kanäle konnten nicht geladen werden. Bitte versuche es später erneut.';
-        });
-    }
-
-    // .m3u-Datei parsen und eine Liste von Kanälen zurückgeben
-    function parseM3U(m3uContent) {
-      const lines = m3uContent.split('\n');
-      const channels = [];
-      let name = null;
-
-      lines.forEach(line => {
-        line = line.trim();
-        if (line.startsWith('#EXTINF:')) {
-          name = line.split(',')[1].trim(); // Kanalname
-        } else if (line.startsWith('http')) {
-          if (name) {
-            channels.push({ name, url: line });
-            name = null;
-          }
+                lines.forEach(line => {
+                    if (line.startsWith('#EXTINF')) {
+                        currentChannel = line.split(',')[1]?.trim();
+                    } else if (line.startsWith('http') && currentChannel) {
+                        // Create a list item for the channel
+                        const li = document.createElement('li');
+                        const a = document.createElement('a');
+                        a.href = '#';
+                        a.textContent = currentChannel;
+                        a.onclick = (e) => {
+                            e.preventDefault();
+                            videoSource.src = line;
+                            videoPlayer.load();
+                            videoPlayer.play();
+                        };
+                        li.appendChild(a);
+                        channelList.appendChild(li);
+                        currentChannel = null;
+                    }
+                });
+            } catch (error) {
+                console.error('Failed to load M3U playlist:', error);
+            }
         }
-      });
-      return channels;
-    }
 
-    // Kanäle in der Sidebar anzeigen
-    function displayChannels(channels) {
-      if (channels.length === 0) {
-        channelList.innerHTML = 'Keine Kanäle in der Playlist gefunden.';
-        return;
-      }
-
-      channelList.innerHTML = '';
-      channels.forEach(channel => {
-        const channelElement = document.createElement('div');
-        channelElement.className = 'channel';
-        channelElement.textContent = channel.name;
-        channelElement.onclick = () => loadChannel(channel.url);
-        channelList.appendChild(channelElement);
-      });
-    }
-
-    // Den ausgewählten Kanal streamen
-    function loadChannel(url) {
-      if (Hls.isSupported()) {
-        // Wenn der Browser HLS.js unterstützt (z.B. Chrome), HLS.js verwenden
-        const hls = new Hls();
-        hls.loadSource(url);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, function () {
-          video.play();
-          video.volume = 0.2; // Setze die Lautstärke auf 20%
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Wenn der Browser HLS nativ unterstützt (z.B. Safari)
-        video.src = url;
-        video.play();
-        video.volume = 0.2; // Setze die Lautstärke auf 20%
-      } else {
-        alert('Dein Browser unterstützt keine HLS-Wiedergabe.');
-      }
-    }
-
-    // Event-Listener für den "Laden"-Button
-    loadButton.addEventListener('click', () => {
-      const url = urlInput.value.trim();
-      if (url) {
-        loadStreamOrPlaylist(url);
-      } else {
-        alert('Bitte eine gültige URL eingeben.');
-      }
-    });
-  </script>
+        // Load the playlist on page load
+        loadM3U();
+    </script>
 </body>
 </html>
+
